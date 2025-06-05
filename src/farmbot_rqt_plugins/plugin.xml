@@ -1,0 +1,15 @@
+<library path="farmbot_rqt_plugins">
+  <class name="MovementPlugin" type="farmbot_rqt_plugins.movement_plugin.MovementPlugin" base_class_type="rqt_gui_py::Plugin">
+    <description>
+      Movement Plugin
+    </description>
+    <qtgui>
+      <group>
+        <label>Farmbot Plugins</label>
+      </group>
+      <label>Movement</label>
+      <icon type="theme">document-new</icon>
+      <statustip>Movement Plugin</statustip>
+    </qtgui>
+  </class>
+</library>
