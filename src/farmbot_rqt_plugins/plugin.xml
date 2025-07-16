@@ -12,4 +12,56 @@
       <statustip>Movement Plugin</statustip>
     </qtgui>
   </class>
+  <class name="FarmbedPlugin" type="farmbot_rqt_plugins.farmbed_plugin.FarmbedPlugin" base_class_type="rqt_gui_py::Plugin">
+    <description>
+      Farmbed Plugin
+    </description>
+    <qtgui>
+      <group>
+        <label>Farmbot Plugins</label>
+      </group>
+      <label>Farmbed</label>
+      <icon type="theme">document-new</icon>
+      <statustip>Farmbed Plugin</statustip>
+    </qtgui>
+  </class>
+  <class name="FarmbedTwoPlugin" type="farmbot_rqt_plugins.farmbedtwo_plugin.FarmbedTwoPlugin" base_class_type="rqt_gui_py::Plugin">
+    <description>
+      Farmbed Two Plugin
+    </description>
+    <qtgui>
+      <group>
+        <label>Farmbot Plugins</label>
+      </group>
+      <label>Farmbed Two</label>
+      <icon type="theme">document-new</icon>
+      <statustip>Farmbed Two Plugin</statustip>
+    </qtgui>
+  </class>
+  <class name="FarmbotGardenPlugin" type="farmbot_rqt_plugins.farmbot_garden_plugin.FarmbotGardenPlugin" base_class_type="rqt_gui_py::Plugin">
+    <description>
+      FarmBot Garden Plugin
+    </description>
+    <qtgui>
+      <group>
+        <label>Farmbot Plugins</label>
+      </group>
+      <label>Garden</label>
+      <icon type="theme">document-new</icon>
+      <statustip>Farmbot Garden Plugin</statustip>
+    </qtgui>
+  </class>
+  <class name="FarmbotLLMPlugin" type="farmbot_rqt_plugins.farmbot_llm_plugin.FarmbotLLMPlugin" base_class_type="rqt_gui_py::Plugin">
+    <description>
+      FarmBot LLM Plugin
+    </description>
+    <qtgui>
+      <group>
+        <label>Farmbot Plugins</label>
+      </group>
+      <label>LLM</label>
+      <icon type="theme">applications-science</icon>
+      <statustip>Farmbot LLM Plugin</statustip>
+    </qtgui>
+  </class>
 </library>

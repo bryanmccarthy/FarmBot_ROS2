@@ -6,3 +6,8 @@
 # Ignore compiled Python files
 *.pyc
 __pycache__/
+
+.env
+
+.helix/
+*.DS_Store/
