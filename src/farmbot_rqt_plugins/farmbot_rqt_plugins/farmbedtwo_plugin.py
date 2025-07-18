@@ -76,6 +76,12 @@ class FarmbedTwoPlugin(Plugin):
         self.gantry_bar = None
         self.gantry_position = None
 
+        # Mouse panning state
+        self.is_panning = False
+        self.last_pan_point = None
+        self.click_start_pos = None
+        self.drag_threshold = 5
+
         # Load active map
         self._load_active_map()
 
@@ -398,21 +404,84 @@ class FarmbedTwoPlugin(Plugin):
                 "color: #2b2b2b; font-size: 11px; font-style: italic;")
             self.plant_details_layout.addWidget(self.no_selection_label)
 
-    def _on_graphics_view_click(self, event):
-        """Handle mouse clicks on the graphics view"""
+    def _on_graphics_view_mouse_press(self, event):
+        """Handle mouse press events on the graphics view"""
         if event.button() == Qt.LeftButton:
-            # Convert click position to scene coordinates
-            scene_pos = self._graphics_view.mapToScene(event.pos())
-            click_x = scene_pos.x()
-            click_y = scene_pos.y()
+            # Store the click start position for drag
+            self.click_start_pos = event.pos()
+        elif event.button() == Qt.MiddleButton:
+            # Start panning with middle mouse button
+            self.is_panning = True
+            self.last_pan_point = event.pos()
+            self._graphics_view.setCursor(Qt.ClosedHandCursor)
 
-            # Check if click is near any plant
-            clicked_plant = self._get_plant_at_position(click_x, click_y)
-            if clicked_plant:
-                self._update_plant_details(clicked_plant)
-            else:
-                # Clear selection if clicking empty space
-                self._update_plant_details(None)
+    def _on_graphics_view_mouse_move(self, event):
+        """Handle mouse move events on the graphics view"""
+        # Check if we should start left-click drag panning
+        if (self.click_start_pos is not None and
+            not self.is_panning and
+                (event.buttons() & Qt.LeftButton)):
+
+            # Calculate distance from click start
+            drag_distance = (
+                event.pos() - self.click_start_pos).manhattanLength()
+
+            if drag_distance > self.drag_threshold:
+                # Start panning
+                self.is_panning = True
+                self.last_pan_point = event.pos()
+                self._graphics_view.setCursor(Qt.ClosedHandCursor)
+
+        # Handle panning (both middle-click and left-click drag)
+        if self.is_panning and self.last_pan_point is not None:
+            delta = event.pos() - self.last_pan_point
+
+            # Get current scrollbar values
+            h_bar = self._graphics_view.horizontalScrollBar()
+            v_bar = self._graphics_view.verticalScrollBar()
+
+            # Update scrollbar positions
+            h_bar.setValue(h_bar.value() - delta.x())
+            v_bar.setValue(v_bar.value() - delta.y())
+
+            # Update last pan point
+            self.last_pan_point = event.pos()
+
+    def _on_graphics_view_mouse_release(self, event):
+        """Handle mouse release events on the graphics view"""
+        if event.button() == Qt.LeftButton:
+            if self.is_panning:
+                # End left-click drag panning
+                self.is_panning = False
+                self.last_pan_point = None
+                self._graphics_view.setCursor(Qt.ArrowCursor)
+            elif self.click_start_pos is not None:
+                # Handle plant selection click
+                drag_distance = (
+                    event.pos() - self.click_start_pos).manhattanLength()
+                if drag_distance <= self.drag_threshold:
+                    # Convert click position to scene coordinates
+                    scene_pos = self._graphics_view.mapToScene(event.pos())
+                    click_x = scene_pos.x()
+                    click_y = scene_pos.y()
+
+                    # Check if click is near any plant
+                    clicked_plant = self._get_plant_at_position(
+                        click_x, click_y)
+                    if clicked_plant:
+                        self._update_plant_details(clicked_plant)
+                    else:
+                        # Clear selection if clicking empty space
+                        self._update_plant_details(None)
+
+            # Reset click start position
+            self.click_start_pos = None
+
+        elif event.button() == Qt.MiddleButton and self.is_panning:
+            # End middle-click panning
+            self.is_panning = False
+            self.last_pan_point = None
+            self._graphics_view.setCursor(Qt.ArrowCursor)
 
     def _get_plant_at_position(self, x, y):
         """Check if the click position is within any plant's icon/circle"""
@@ -475,8 +544,11 @@ class FarmbedTwoPlugin(Plugin):
         self._scene.setSceneRect(0, 0, WIDTH, HEIGHT)
         self._graphics_view.setScene(self._scene)
 
-        # Enable mouse tracking for plant selection
-        self._graphics_view.mousePressEvent = self._on_graphics_view_click
+        # Enable mouse tracking for plant selection and panning
+        self._graphics_view.mousePressEvent = self._on_graphics_view_mouse_press
+        self._graphics_view.mouseMoveEvent = self._on_graphics_view_mouse_move
+        self._graphics_view.mouseReleaseEvent = self._on_graphics_view_mouse_release
+        self._graphics_view.setMouseTracking(True)
 
         # Disable built-in scrollbars
         self._graphics_view.setFrameStyle(0)
@@ -858,13 +930,6 @@ class FarmbedTwoPlugin(Plugin):
     def restore_settings(self, plugin_settings, instance_settings):
         pass
 
-    def keyPressEvent(self, event):  # TODO: remove ?
-        """Handle key press events for zoom control"""
-        if event.key() == Qt.Key_W:
-            self._zoom_in()
-        elif event.key() == Qt.Key_S:
-            self._zoom_out()
-
     def _zoom_in(self):
         """Zoom in the graphics view"""
         if self.zoom_factor < self.zoom_max:
@@ -901,6 +966,11 @@ class FarmbedTwoPlugin(Plugin):
         """Update axis labels to reflect zoom changes"""
         self._top_labels.set_zoom_factor(self.zoom_factor)
         self._left_labels.set_zoom_factor(self.zoom_factor)
+
+    def keyPressEvent(self, event):
+        """Handle key press events"""
+        # Add any key handling logic here if needed
+        pass
 
 
 class AxisLabelWidget(QWidget):
