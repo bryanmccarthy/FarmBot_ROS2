@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
     QGraphicsEllipseItem,
     QGraphicsPixmapItem,
     QGraphicsTextItem,
+    QGraphicsRectItem,
     QScrollBar,
     QSplitter,
     QLabel,
@@ -71,6 +72,7 @@ class FarmbedTwoPlugin(Plugin):
         # Toggle states
         self.show_canopy_radius = True
         self.show_plant_indices = False
+        self.show_plant_names = False
 
         # Gantry graphics items
         self.gantry_bar = None
@@ -298,6 +300,31 @@ class FarmbedTwoPlugin(Plugin):
         self.indices_checkbox.stateChanged.connect(self._toggle_plant_indices)
         toggles_layout.addWidget(self.indices_checkbox)
 
+        # Plant names toggle
+        self.names_checkbox = QCheckBox("Show Plant Names")
+        self.names_checkbox.setChecked(self.show_plant_names)
+        self.names_checkbox.setStyleSheet("""
+            QCheckBox {
+                color: #2b2b2b;
+                font-size: 9px;
+                spacing: 5px;
+            }
+            QCheckBox::indicator {
+                width: 13px;
+                height: 13px;
+            }
+            QCheckBox::indicator:unchecked {
+                border: 1px solid #2b2b2b;
+                background-color: white;
+            }
+            QCheckBox::indicator:checked {
+                border: 1px solid #2b2b2b;
+                background-color: #2b2b2b;
+            }
+        """)
+        self.names_checkbox.stateChanged.connect(self._toggle_plant_names)
+        toggles_layout.addWidget(self.names_checkbox)
+
         toggles_widget.setLayout(toggles_layout)
         return toggles_widget
 
@@ -309,6 +336,11 @@ class FarmbedTwoPlugin(Plugin):
     def _toggle_plant_indices(self, state):
         """Toggle plant indices visibility"""
         self.show_plant_indices = state == Qt.Checked
+        self._redraw_plants()
+
+    def _toggle_plant_names(self, state):
+        """Toggle plant names visibility"""
+        self.show_plant_names = state == Qt.Checked
         self._redraw_plants()
 
     def _update_plant_details(self, plant_data):
@@ -807,15 +839,58 @@ class FarmbedTwoPlugin(Plugin):
                 circle.setBrush(plant_brush)
                 self._scene.addItem(circle)
 
-            # Add plant index text if enabled
+            text_y_offset = 50  # Distance above plant center
+            labels_y = y - text_y_offset
+
+            # Collect label information
+            name_text = None
+            index_text = None
+            name_width = 0
+            index_width = 0
+
+            # Create plant name text if enabled
+            if self.show_plant_names:
+                name_text = QGraphicsTextItem(plant_name)
+                name_text.setDefaultTextColor(QColor(255, 255, 255))
+                name_text.setFont(QFont("Arial", 18, QFont.Bold))
+                name_width = name_text.boundingRect().width()
+
+            # Create plant index text if enabled
             if self.show_plant_indices:
                 index_text = QGraphicsTextItem(str(plant_index))
-                index_text.setDefaultTextColor(QColor(0, 0, 0))
+                index_text.setDefaultTextColor(QColor(255, 255, 255))
                 index_text.setFont(QFont("Arial", 18, QFont.Bold))
+                index_width = index_text.boundingRect().width()
 
-                # Position text slightly offset from plant center
-                text_offset = 25
-                index_text.setPos(x + text_offset, y - text_offset)
+            total_width = name_width + index_width
+            start_x = x - total_width / 2
+            current_x = start_x
+
+            # Position and add plant name
+            if name_text:
+                name_text.setPos(current_x, labels_y)
+
+                # Add background for name text
+                background_rect = QGraphicsRectItem(name_text.boundingRect())
+                background_rect.setPos(current_x, labels_y)
+                background_rect.setBrush(QColor(0, 0, 0, 128))
+                background_rect.setPen(QPen(Qt.NoPen))
+                self._scene.addItem(background_rect)
+                self._scene.addItem(name_text)
+
+                current_x += name_width
+
+            # Position and add plant index
+            if index_text:
+                index_text.setPos(current_x, labels_y)
+
+                # Add background for index text
+                index_background_rect = QGraphicsRectItem(
+                    index_text.boundingRect())
+                index_background_rect.setPos(current_x, labels_y)
+                index_background_rect.setBrush(QColor(0, 0, 0, 128))
+                index_background_rect.setPen(QPen(Qt.NoPen))
+                self._scene.addItem(index_background_rect)
                 self._scene.addItem(index_text)
 
     def _redraw_plants(self):
@@ -823,14 +898,14 @@ class FarmbedTwoPlugin(Plugin):
         # TODO: fix this
         items_to_remove = []
         for item in self._scene.items():
-            if isinstance(item, (QGraphicsPixmapItem, QGraphicsEllipseItem, QGraphicsTextItem)):
+            if isinstance(item, (QGraphicsPixmapItem, QGraphicsEllipseItem, QGraphicsTextItem, QGraphicsRectItem)):
                 # Check if it's a plant item (not a grid line)
                 if hasattr(item, 'pen') and isinstance(item, QGraphicsEllipseItem):
                     # Check if it's a plant circle or canopy circle (green color)
                     pen_color = item.pen().color()
                     if pen_color.red() == 34 and pen_color.green() == 139 and pen_color.blue() == 34:
                         items_to_remove.append(item)
-                elif isinstance(item, (QGraphicsPixmapItem, QGraphicsTextItem)):
+                elif isinstance(item, (QGraphicsPixmapItem, QGraphicsTextItem, QGraphicsRectItem)):
                     items_to_remove.append(item)
 
         for item in items_to_remove:
@@ -884,6 +959,7 @@ class FarmbedTwoPlugin(Plugin):
                                 if day and month and year:
                                     date_str = f"{day}/{month}/{year}"
 
+                            # TODO: add plant type for fields
                             self.plant_data.append({
                                 "x": plant_data["position"]["x"],
                                 "y": plant_data["position"]["y"],
