@@ -1,4 +1,5 @@
 from PyQt5.QtWidgets import QVBoxLayout, QWidget, QTextEdit, QLineEdit, QFrame, QHBoxLayout, QPushButton, QLabel
+from PyQt5.QtCore import QThread, pyqtSignal
 
 from rqt_gui_py.plugin import Plugin
 from langchain.chat_models import init_chat_model
@@ -42,6 +43,27 @@ def format_command_sequence(command_string: str) -> str:
 
 # Global reference to plugin instance for the tool
 _plugin_instance = None
+
+
+class LLMWorkerThread(QThread):
+    response_ready = pyqtSignal(str)
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, agent_executor, message, chat_history):
+        super().__init__()
+        self.agent_executor = agent_executor
+        self.message = message
+        self.chat_history = chat_history
+
+    def run(self):
+        try:
+            response = self.agent_executor.invoke({
+                "input": self.message,
+                "chat_history": self.chat_history
+            })
+            self.response_ready.emit(response['output'])
+        except Exception as e:
+            self.error_occurred.emit(str(e))
 
 
 @tool
@@ -354,7 +376,7 @@ class FarmbotLLMPlugin(Plugin):
                 - If the user gives farmbot commands in natural language first use list_available_commands to see available commands
                 - Check the active map for current state for any commands that require knowledge
                 - When providing command sequences, use set_proposed_command to propose them for user approval instead of format_command_sequence
-    
+
                 ## Example 1: Basic Movement
                 **Input:** "Move to position 100, 200, -150"
                 **Process:** Use set_proposed_command("M 100 200 -150")
@@ -408,6 +430,7 @@ class FarmbotLLMPlugin(Plugin):
             self.agent_executor = AgentExecutor(
                 agent=agent, tools=self.tools, verbose=True)
             self.chat_history = []
+            self.worker_thread = None
 
         except Exception as e:
             print(f"Error initializing LangChain agent: {e}")
@@ -552,35 +575,62 @@ class FarmbotLLMPlugin(Plugin):
 
     def _send_message(self):
         message = self.input_box.text()
-        if message:
+        if message and not (self.worker_thread and self.worker_thread.isRunning()):
             # Display user message
             self.chat_display.append(
                 f"<span style='color: #555;'>• {message}</span>")
             self.input_box.clear()
 
+            # Show loading message
+            self.chat_display.append(
+                "<span style='color: #888;'>• Thinking...</span>")
+            self.input_box.setEnabled(False)
+
             if self.agent_executor:
-                try:
-                    response = self.agent_executor.invoke({
-                        "input": message,
-                        "chat_history": self.chat_history
-                    })
-
-                    # Add to history
-                    self.chat_history.extend([
-                        HumanMessage(content=message),
-                        AIMessage(content=response['output'])
-                    ])
-
-                    # Display response
-                    self.chat_display.append(f"• {response['output']}")
-
-                except Exception as e:
-                    self.chat_display.append(f"Error: {e}")
+                # Create and start worker thread
+                self.worker_thread = LLMWorkerThread(
+                    self.agent_executor, message, self.chat_history
+                )
+                self.worker_thread.response_ready.connect(self._on_response)
+                self.worker_thread.error_occurred.connect(self._on_error)
+                self.worker_thread.start()
             else:
                 self.chat_display.append("Agent not initialized")
+                self.input_box.setEnabled(True)
+
+    def _on_response(self, response):
+        # Remove "Thinking..." message
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(cursor.End)
+        cursor.select(cursor.BlockUnderCursor)
+        cursor.removeSelectedText()
+        cursor.deletePreviousChar()
+
+        # Add to history
+        self.chat_history.extend([
+            HumanMessage(content=self.worker_thread.message),
+            AIMessage(content=response)
+        ])
+
+        # Display response
+        self.chat_display.append(f"• {response}")
+        self.input_box.setEnabled(True)
+
+    def _on_error(self, error):
+        # Remove "Thinking..." message
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(cursor.End)
+        cursor.select(cursor.BlockUnderCursor)
+        cursor.removeSelectedText()
+        cursor.deletePreviousChar()
+
+        self.chat_display.append(f"Error: {error}")
+        self.input_box.setEnabled(True)
 
     def shutdown_plugin(self):
-        pass
+        if self.worker_thread and self.worker_thread.isRunning():
+            self.worker_thread.quit()
+            self.worker_thread.wait()
 
     def save_settings(self, plugin_settings, instance_settings):
         pass
